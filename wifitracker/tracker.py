@@ -1,9 +1,15 @@
 import datetime
+import logging
 
+import requests
 from scapy.all import Dot11ProbeReq
 
+log = logging.getLogger(__name__)
 
-def _extract_signal_strength(packet):
+
+def _extract_rssi(packet):
+    """Extract the RSSi (received signal strength indicator) from a wifi packet.
+    """
     try:
         extra = packet.notdecoded
         signal_strength = -(256 - ord(extra[-4:-3]))
@@ -14,6 +20,8 @@ def _extract_signal_strength(packet):
 
 
 def _extract_ssid(packet):
+    """Extract the SSID (service set identifier) from a captured wifi packet.
+    """
     ssid = packet.getlayer(Dot11ProbeReq).info
     if len(ssid) < 1:
         ssid = None
@@ -27,7 +35,8 @@ class ProbeRequest(object):
         self.target_mac = packet.addr3.lower()
         self.target_ssid = _extract_ssid(packet)
         self.source_mac = packet.addr2.lower()
-        self.signal_strength = _extract_signal_strength(packet)
+        self.signal_strength = _extract_rssi(packet)
+        log.info("captured probe request: {}".format(self))
 
     def _get_id(self):
         return self.source_mac + str(self.capture_dts)
@@ -36,9 +45,9 @@ class ProbeRequest(object):
         return 'ProbeRequest'
 
     def __str__(self):
-        return "Source: {} || SSID: {} || RSSi: {}".format(self.source_mac,
-                                                           self.target_ssid,
-                                                           self.signal_strength)
+        return "SENDER='{}', SSID='{}', RSSi={}".format(self.source_mac,
+                                                        self.target_ssid,
+                                                        self.signal_strength)
 
 
 class Device(object):
@@ -47,6 +56,27 @@ class Device(object):
         self.device_mac = request.source_mac
         self.known_ssids = []
         self.last_seen_dts = datetime.datetime.now()
+        self._set_vendor()
+        log.debug("detected device: {}".format(self))
+
+    def _get_vendor(self):
+        lookup_url = 'https://www.macvendorlookup.com/api/v2/' + self.device_mac
+        try:
+            vendor_response = requests.get(lookup_url).json()[0]
+        except Exception as e:
+            log.error("Unable to lookup vendor.", e)
+            raise e
+        else:
+            return vendor_response
+
+    def _set_vendor(self):
+        try:
+            vendor = self._get_vendor()
+            self.vendor_company = vendor['company']
+            self.vendor_country = vendor['country']
+        except:
+            self.vendor_company = 'unknown'
+            self.vendor_country = 'ZZ'
 
     def add_ssid(self, ssid):
         if ssid and ssid not in self.known_ssids:
@@ -62,16 +92,15 @@ class Device(object):
         return 'Device'
 
     def __str__(self):
-        return "Device: {}".format(self.device_mac)
+        return "MAC='{}', vendor='{} [{}]'".format(self.device_mac,
+                                                   self.vendor_company,
+                                                   self.vendor_country)
 
 
 class Storage(object):
 
-    def __init__(self, threshold=None):
+    def __init__(self):
         self.storage = {}
-        if not threshold:
-            threshold = datetime.timedelta(seconds=2)
-        self.threshold = threshold
 
     def add(self, document):
         id = document._get_id()

@@ -16,20 +16,21 @@ def packet_handler(packet):
     if packet.haslayer(Dot11):
         if (packet.type == PR_TYPE and packet.subtype == PR_SUBTYPE):
             request = ProbeRequest(packet)
-            log.debug(request)
+            log.info("captured probe request: {}".format(request))
             store_probe_request(request)
 
 
 def store_probe_request(request):
-    STORAGE.add(request)
+    # disabled to preserve memory until requests are actualle stored somewhere
+    # STORAGE.add(request)
     try:
         device = STORAGE.get('Device', request.source_mac)
     except KeyError:
         device = Device(request)
-        log.info("New device detected: {}".format(device))
+        log.info("new device detected: {}".format(device))
     device.add_ssid(request.target_ssid)
     STORAGE.add(device)
 
 
 def sniff(iface):
-    scapysniff(iface=iface, prn=packet_handler)
+    scapysniff(iface=iface, prn=packet_handler, store=0)
