@@ -1,5 +1,8 @@
+from collections import OrderedDict
 import datetime
+import json
 import logging
+import os.path
 
 import requests
 from scapy.all import Dot11ProbeReq
@@ -36,7 +39,6 @@ class ProbeRequest(object):
         self.target_ssid = _extract_ssid(packet)
         self.source_mac = packet.addr2.lower()
         self.signal_strength = _extract_rssi(packet)
-        log.info("captured probe request: {}".format(self))
 
     def _get_id(self):
         return self.source_mac + str(self.capture_dts)
@@ -57,7 +59,6 @@ class Device(object):
         self.known_ssids = []
         self.last_seen_dts = datetime.datetime.now()
         self._set_vendor()
-        log.debug("detected device: {}".format(self))
 
     def _get_vendor(self):
         lookup_url = 'https://www.macvendorlookup.com/api/v2/' + self.device_mac
@@ -95,6 +96,21 @@ class Device(object):
         return "MAC='{}', vendor='{} [{}]'".format(self.device_mac,
                                                    self.vendor_company,
                                                    self.vendor_country)
+
+    def __odict__(self):
+        return OrderedDict([('device_mac', self.device_mac),
+                            ('known_ssids', self.known_ssids),
+                            ('last_seen_dts', str(self.last_seen_dts)),
+                            ('vendor_company', self.vendor_company),
+                            ('vendor_country', self.vendor_country)])
+
+    def dump_json(self, dump_dir):
+        filename = os.path.join(dump_dir, 'dev_{}.json'.format(self._get_id()))
+        with open(filename, 'w') as file:
+            json.dump(self.__odict__(),
+                      file,
+                      indent=4,
+                      separators=(',', ': '))
 
 
 class Storage(object):

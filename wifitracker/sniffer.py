@@ -11,6 +11,8 @@ log = logging.getLogger(__name__)
 PR_TYPE = 0
 PR_SUBTYPE = 4
 
+DUMP_DIR = None
+
 
 def packet_handler(packet):
     if packet.haslayer(Dot11):
@@ -30,7 +32,11 @@ def store_probe_request(request):
         log.info("new device detected: {}".format(device))
     device.add_ssid(request.target_ssid)
     STORAGE.add(device)
+    if DUMP_DIR:
+        device.dump_json(DUMP_DIR)
 
 
-def sniff(iface):
-    scapysniff(iface=iface, prn=packet_handler, store=0)
+def sniff(interface, dump_dir=None):
+    global DUMP_DIR
+    DUMP_DIR = dump_dir
+    scapysniff(iface=interface, prn=packet_handler, store=0)
