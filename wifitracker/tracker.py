@@ -28,6 +28,10 @@ def _extract_ssid(packet):
     ssid = packet.getlayer(Dot11ProbeReq).info
     if len(ssid) < 1:
         ssid = None
+    try:
+        ssid = str(ssid)
+    except:
+        ssid = None
     return ssid
 
 
@@ -55,12 +59,14 @@ class ProbeRequest(object):
 class Device(object):
 
     def __init__(self, request):
+        now = datetime.datetime.now()
         self.device_mac = request.source_mac
         self.known_ssids = []
-        self.last_seen_dts = datetime.datetime.now()
-        self._set_vendor()
+        self.lookup_vendor()
+        self.last_seen_dts = now
+        self.modify_dts = now
 
-    def _get_vendor(self):
+    def _request_vendor(self):
         lookup_url = 'https://www.macvendorlookup.com/api/v2/' + self.device_mac
         try:
             vendor_response = requests.get(lookup_url).json()[0]
@@ -70,20 +76,21 @@ class Device(object):
         else:
             return vendor_response
 
-    def _set_vendor(self):
+    def lookup_vendor(self):
         try:
-            vendor = self._get_vendor()
+            vendor = self._request_vendor()
             self.vendor_company = vendor['company']
             self.vendor_country = vendor['country']
         except:
-            self.vendor_company = 'unknown'
-            self.vendor_country = 'ZZ'
+            self.vendor_company = None
+            self.vendor_country = None
 
     def add_ssid(self, ssid):
         if ssid and ssid not in self.known_ssids:
             self.known_ssids.append(ssid)
+            self.modify_dts = datetime.datetime.now()
 
-    def _update_last_seen_dts(self):
+    def update_last_seen_dts(self):
         self.last_seen_dts = datetime.datetime.now()
 
     def _get_id(self):

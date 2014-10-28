@@ -39,4 +39,8 @@ def store_probe_request(request):
 def sniff(interface, dump_dir=None):
     global DUMP_DIR
     DUMP_DIR = dump_dir
-    scapysniff(iface=interface, prn=packet_handler, store=0)
+    while(True):
+        try:
+            scapysniff(iface=interface, prn=packet_handler, store=0)
+        except:
+            continue
