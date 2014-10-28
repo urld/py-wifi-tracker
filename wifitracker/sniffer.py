@@ -27,6 +27,7 @@ def store_probe_request(request):
     # STORAGE.add(request)
     try:
         device = STORAGE.get('Device', request.source_mac)
+        device.update_last_seen_dts()
     except KeyError:
         device = Device(request)
         log.info("new device detected: {}".format(device))

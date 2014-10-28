@@ -18,6 +18,7 @@ Commands:
 
 import datetime
 import logging
+import os
 
 from docopt import docopt
 from wifitracker import sniffer, __version__, STORAGE
@@ -46,6 +47,7 @@ if __name__ == "__main__":
     if args['--debug']:
         logging.getLogger().setLevel(logging.DEBUG)
     log.debug(args)
+    log.info("PID: {}".format(os.getpid()))
 
     # execute command:
     if args['sniff']:
