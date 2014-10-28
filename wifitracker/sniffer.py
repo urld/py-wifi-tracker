@@ -1,6 +1,7 @@
 import logging
 
-from scapy.all import sniff as scapysniff
+from scapy.all import sniff as scapy_sniff
+from scapy.all import conf as scapy_conf
 from scapy.all import Dot11
 
 from wifitracker.tracker import ProbeRequest, Device
@@ -40,8 +41,12 @@ def store_probe_request(request):
 def sniff(interface, dump_dir=None):
     global DUMP_DIR
     DUMP_DIR = dump_dir
-    while(True):
-        try:
-            scapysniff(iface=interface, prn=packet_handler, store=0)
-        except:
-            continue
+    # The interface needs to be set explicitly due to a bug in scapy.
+    # It is not sufficient to pass iface to the scniff function.
+    scapy_conf.iface = interface
+    # The filter only works on the assumption that only 802.11 packets are
+    # received.
+    # for more information on the filter, see man pages of tcpdump
+    scapy_sniff(prn=packet_handler,
+                filter='type mgt subtype probe-req',
+                store=0)
