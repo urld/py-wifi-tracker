@@ -3,6 +3,7 @@
 
 Usage:
     {basename} sniff <interface> [options]
+    {basename} kill
     {basename} -h | --help
     {basename} --version
 
@@ -30,12 +31,18 @@ if __name__ == "__main__":
     if args['--debug']:
         logging.getLogger().setLevel(logging.DEBUG)
     log.debug(args)
-    log.info("PID: {}".format(os.getpid()))
 
     # execute command:
     if args['sniff']:
+        log.info("PID: {}".format(os.getpid()))
+        with open('pid.lock', 'w') as file:
+            file.write(str(os.getpid()))
         try:
             start_dts = datetime.datetime.now()
             sniffer.sniff(args['<interface>'])
         except Exception as e:
             print e
+    elif args['kill']:
+        with open('pid.lock', 'r') as file:
+            pid = int(file.read())
+        os.kill(pid, 9)

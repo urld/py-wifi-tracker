@@ -45,10 +45,7 @@ class Device(object):
         self.last_seen_dts = last_seen_dts
 
     def _lookup_vendor(self):
-        """
-        """
-        lookup_url = 'https://www.macvendorlookup.com/api/v2/' + \
-            self.device_mac
+        lookup_url = 'https://www.macvendorlookup.com/api/v2/' + self.device_mac
         try:
             vendor_response = requests.get(lookup_url).json()[0]
         except Exception as e:
@@ -69,6 +66,7 @@ class Device(object):
     def add_ssid(self, ssid):
         if ssid and ssid not in self.known_ssids:
             self.known_ssids.append(ssid)
+            log.debug('Appending SSID:{}'.format(ssid))
 
     def _get_type(self):
         return 'Device'
@@ -91,17 +89,20 @@ class Tracker(object):
     def __init__(self, storage_dir):
         self.storage_dir = storage_dir
         self.request_filename = os.path.join(self.storage_dir, 'requests')
+        self.locked = []
 
     def add_request(self, request):
         # add request to tracker
         self._write_request(request)
         # check if device is known:
+        self.lock(request.source_mac)
         device = self.get_device(request.source_mac)
         if not device:
             # create new device if unknown:
             device = Device(request.source_mac)
             device.set_vendor()
             log.info("new device detected: {}".format(device))
+            log.debug("FUCK {}: {}".format())
         # update device data:
         device.add_ssid(request.target_ssid)
         if device.last_seen_dts:
@@ -129,6 +130,7 @@ class Tracker(object):
                             known_ssids=dump['known_ssids'],
                             vendor_company=dump['vendor_company'],
                             vendor_country=dump['vendor_country'])
+            log.debug('Reading {}: {}'.format(device.device_mac, device.known_ssids))
             return device
 
     def _write_device(self, device):
@@ -137,11 +139,23 @@ class Tracker(object):
         filepath = os.path.join(self.storage_dir, filename)
         with open(filepath, 'w') as file:
             file.write(dump)
+        log.debug('Wrote {}: {}'.format(device.device_mac, device.known_ssids))
 
     def _write_request(self, request):
         dump = json_compact(request)
         with open(self.request_filename, 'a') as requests_file:
             requests_file.write('\n' + dump)
+
+    def lock(self, device_mac):
+        while device_mac in self.locked:
+            pass
+        self.locked.append(device_mac)
+
+    def release(self, device_mac):
+        try:
+            self.locked.remove(device_mac)
+        except ValueError:
+            pass
 
 
 def json_pretty(obj):

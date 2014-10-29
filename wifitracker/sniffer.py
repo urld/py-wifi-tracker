@@ -47,7 +47,12 @@ def packet_handler(packet):
         if (packet.type == PR_TYPE and packet.subtype == PR_SUBTYPE):
             request = summarize_probe_request(packet)
             log.info("captured probe request: {}".format(request))
-            TRACKER.add_request(request)
+            try:
+                TRACKER.add_request(request)
+            except Exception as e:
+                log.error('Unable to add request', e)
+            finally:
+                TRACKER.release(request.source_mac)
 
 
 def summarize_probe_request(packet):
