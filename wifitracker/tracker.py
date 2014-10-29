@@ -93,26 +93,23 @@ class Tracker(object):
         self.request_filename = os.path.join(self.storage_dir, 'requests')
 
     def add_request(self, request):
-        dump = json_compact(request)
-        with open(self.request_filename, 'a') as file:
-            file.write('\n' + dump)
+        # add request to tracker
+        self._write_request(request)
+        # check if device is known:
         device = self.get_device(request.source_mac)
         if not device:
+            # create new device if unknown:
             device = Device(request.source_mac)
             device.set_vendor()
             log.info("new device detected: {}".format(device))
+        # update device data:
         device.add_ssid(request.target_ssid)
-        device.last_seen_dts = request.capture_dts
-        self.add_device(device)
-
-    def add_device(self, device):
-        # check if already exists:
-        old_device = self.get_device(device.device_mac)
-        if old_device:
-            return self.update_device(device)
+        if device.last_seen_dts:
+            if device.last_seen_dts < request.capture_dts:
+                device.last_seen_dts = request.capture_dts
         else:
-            # no device found, save new device:
-            return self._write_device(device)
+            device.last_seen_dts = request.capture_dts
+        self._write_device(device)
 
     def get_device(self, device_mac):
         filename = 'device_{}.json'.format(device_mac.replace(':', '_'))
@@ -134,26 +131,17 @@ class Tracker(object):
                             vendor_country=dump['vendor_country'])
             return device
 
-    def update_device(self, device):
-        old_device = self.get_device(device.device_mac)
-        if not old_device:
-            raise KeyError("No such device logged.")
-        for ssid in device.known_ssids:
-            old_device.add_ssid(ssid)
-        if old_device.last_seen_dts is None:
-            old_device.last_seen_dts = device.last_seen_dts
-        elif device.last_seen_dts > old_device.last_seen_dts:
-            old_device.last_seen_dts = device.last_seen_dts
-        if not old_device.vendor_company or not old_device.vendor_country:
-            old_device.set_vendor()
-        self._write_device(old_device)
-
     def _write_device(self, device):
         dump = json_pretty(device)
         filename = 'device_{}.json'.format(device.device_mac.replace(':', '_'))
         filepath = os.path.join(self.storage_dir, filename)
         with open(filepath, 'w') as file:
             file.write(dump)
+
+    def _write_request(self, request):
+        dump = json_compact(request)
+        with open(self.request_filename, 'a') as requests_file:
+            requests_file.write('\n' + dump)
 
 
 def json_pretty(obj):
