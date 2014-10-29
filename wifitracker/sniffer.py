@@ -51,8 +51,6 @@ def packet_handler(packet):
                 TRACKER.add_request(request)
             except Exception as e:
                 log.error('Unable to add request', e)
-            finally:
-                TRACKER.release(request.source_mac)
 
 
 def summarize_probe_request(packet):

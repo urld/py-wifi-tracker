@@ -3,6 +3,7 @@
 
 Usage:
     {basename} sniff <interface> [options]
+    {basename} show [<device_mac>] [options]
     {basename} kill
     {basename} -h | --help
     {basename} --version
@@ -10,9 +11,13 @@ Usage:
 Options:
     -h --help           Show help.
     --debug             Print debugging messages.
+    --nooui             Omit OUI vendor lookup. This might be usefull if
+                        no internet connection is availaible.
 
 Commands:
     sniff           Sniff probe requests sent by devices in your area.
+    show            Show all tracked devices.
+    kill            Kill the last startet sniffer process.
 """
 
 import datetime
@@ -20,7 +25,7 @@ import logging
 import os
 
 from docopt import docopt
-from wifitracker import sniffer, __version__
+from wifitracker import __version__
 
 
 log = logging.getLogger(__name__)
@@ -34,15 +39,24 @@ if __name__ == "__main__":
 
     # execute command:
     if args['sniff']:
+        from wifitracker import sniffer
         log.info("PID: {}".format(os.getpid()))
-        with open('pid.lock', 'w') as file:
+        with open('/var/opt/wifi-tracker/pid.lock', 'w') as file:
             file.write(str(os.getpid()))
         try:
             start_dts = datetime.datetime.now()
             sniffer.sniff(args['<interface>'])
         except Exception as e:
             print e
+    elif args['show']:
+        from wifitracker.tracker import Tracker, json_pretty
+        tracker = Tracker('/var/opt/wifi-tracker')
+        oui_lookup = not args['--nooui']
+        devices = tracker.get_devices(load_dts=datetime.datetime.now(),
+                                      oui_lookup=oui_lookup)
+        for id in devices:
+            print json_pretty(devices[id])
     elif args['kill']:
-        with open('pid.lock', 'r') as file:
+        with open('/var/opt/wifi-tracker/pid.lock', 'r') as file:
             pid = int(file.read())
         os.kill(pid, 9)
