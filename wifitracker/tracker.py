@@ -5,47 +5,19 @@ import logging
 import os.path
 
 import requests
-from scapy.all import Dot11ProbeReq
 
 log = logging.getLogger(__name__)
-
-
-def _extract_rssi(packet):
-    """Extract the RSSi (received signal strength indicator) from a wifi packet.
-    """
-    try:
-        extra = packet.notdecoded
-        signal_strength = -(256 - ord(extra[-4:-3]))
-    except Exception as e:
-        print e
-        signal_strength = None
-    return signal_strength
-
-
-def _extract_ssid(packet):
-    """Extract the SSID (service set identifier) from a captured wifi packet.
-    """
-    ssid = packet.getlayer(Dot11ProbeReq).info
-    if len(ssid) < 1:
-        ssid = None
-    try:
-        ssid = str(ssid)
-    except:
-        ssid = None
-    return ssid
+logging.getLogger('requests').setLevel(logging.WARNING)
 
 
 class ProbeRequest(object):
 
-    def __init__(self, packet):
-        self.capture_dts = datetime.datetime.now()
-        self.target_mac = packet.addr3.lower()
-        self.target_ssid = _extract_ssid(packet)
-        self.source_mac = packet.addr2.lower()
-        self.signal_strength = _extract_rssi(packet)
-
-    def _get_id(self):
-        return self.source_mac + str(self.capture_dts)
+    def __init__(self, source_mac, capture_dts,
+                 target_ssid=None, signal_strength=None):
+        self.capture_dts = capture_dts
+        self.source_mac = source_mac
+        self.target_ssid = target_ssid
+        self.signal_strength = signal_strength
 
     def _get_type(self):
         return 'ProbeRequest'
@@ -55,19 +27,28 @@ class ProbeRequest(object):
                                                         self.target_ssid,
                                                         self.signal_strength)
 
+    def __jdict__(self):
+        return OrderedDict([('source_mac', self.source_mac),
+                            ('capture_dts', str(self.capture_dts)),
+                            ('target_ssid', self.target_ssid),
+                            ('signal_strength', self.signal_strength)])
+
 
 class Device(object):
 
-    def __init__(self, request):
-        now = datetime.datetime.now()
-        self.device_mac = request.source_mac
-        self.known_ssids = []
-        self.lookup_vendor()
-        self.last_seen_dts = now
-        self.modify_dts = now
+    def __init__(self, device_mac, last_seen_dts=None, known_ssids=[],
+                 vendor_company=None, vendor_country=None):
+        self.device_mac = device_mac
+        self.known_ssids = known_ssids
+        self.vendor_company = vendor_company
+        self.vendor_country = vendor_country
+        self.last_seen_dts = last_seen_dts
 
-    def _request_vendor(self):
-        lookup_url = 'https://www.macvendorlookup.com/api/v2/' + self.device_mac
+    def _lookup_vendor(self):
+        """
+        """
+        lookup_url = 'https://www.macvendorlookup.com/api/v2/' + \
+            self.device_mac
         try:
             vendor_response = requests.get(lookup_url).json()[0]
         except Exception as e:
@@ -76,9 +57,9 @@ class Device(object):
         else:
             return vendor_response
 
-    def lookup_vendor(self):
+    def set_vendor(self):
         try:
-            vendor = self._request_vendor()
+            vendor = self._lookup_vendor()
             self.vendor_company = vendor['company']
             self.vendor_country = vendor['country']
         except:
@@ -88,13 +69,6 @@ class Device(object):
     def add_ssid(self, ssid):
         if ssid and ssid not in self.known_ssids:
             self.known_ssids.append(ssid)
-            self.modify_dts = datetime.datetime.now()
-
-    def update_last_seen_dts(self):
-        self.last_seen_dts = datetime.datetime.now()
-
-    def _get_id(self):
-        return self.device_mac
 
     def _get_type(self):
         return 'Device'
@@ -104,44 +78,87 @@ class Device(object):
                                                    self.vendor_company,
                                                    self.vendor_country)
 
-    def __odict__(self):
+    def __jdict__(self):
         return OrderedDict([('device_mac', self.device_mac),
                             ('known_ssids', self.known_ssids),
                             ('last_seen_dts', str(self.last_seen_dts)),
                             ('vendor_company', self.vendor_company),
                             ('vendor_country', self.vendor_country)])
 
-    def dump_json(self, dump_dir):
-        filename = os.path.join(dump_dir, 'dev_{}.json'.format(self._get_id()))
-        with open(filename, 'w') as file:
-            json.dump(self.__odict__(),
-                      file,
-                      indent=4,
-                      separators=(',', ': '))
 
+class Tracker(object):
 
-class Storage(object):
+    def __init__(self, storage_dir):
+        self.storage_dir = storage_dir
+        self.request_filename = os.path.join(self.storage_dir, 'requests')
 
-    def __init__(self):
-        self.storage = {}
+    def add_request(self, request):
+        dump = json_compact(request)
+        with open(self.request_filename, 'a') as file:
+            file.write('\n' + dump)
+        device = self.get_device(request.source_mac)
+        if not device:
+            device = Device(request.source_mac)
+            device.set_vendor()
+            log.info("new device detected: {}".format(device))
+        device.add_ssid(request.target_ssid)
+        device.last_seen_dts = request.capture_dts
+        self.add_device(device)
 
-    def add(self, document):
-        id = document._get_id()
-        type = document._get_type()
-        key = _make_key(type, id)
-        self.storage[key] = document
-
-    def get(self, type, id):
-        key = _make_key(type, id)
-        return self.storage[key]
-
-    def has(self, type, id):
-        key = _make_key(type, id)
-        if key in self.storage:
-            return True
+    def add_device(self, device):
+        # check if already exists:
+        old_device = self.get_device(device.device_mac)
+        if old_device:
+            return self.update_device(device)
         else:
-            return False
+            # no device found, save new device:
+            return self._write_device(device)
+
+    def get_device(self, device_mac):
+        filename = 'device_{}.json'.format(device_mac.replace(':', '_'))
+        filepath = os.path.join(self.storage_dir, filename)
+        if not os.path.isfile(filepath):
+            return None
+        with open(filepath, 'r') as file:
+            dump = json.load(file)
+            try:
+                last_seen_dts = datetime.datetime.strptime(
+                    dump['last_seen_dts'],
+                    '%Y-%m-%d %H:%M:%S.%f')
+            except:
+                last_seen_dts = None
+            device = Device(dump['device_mac'],
+                            last_seen_dts=last_seen_dts,
+                            known_ssids=dump['known_ssids'],
+                            vendor_company=dump['vendor_company'],
+                            vendor_country=dump['vendor_country'])
+            return device
+
+    def update_device(self, device):
+        old_device = self.get_device(device.device_mac)
+        if not old_device:
+            raise KeyError("No such device logged.")
+        for ssid in device.known_ssids:
+            old_device.add_ssid(ssid)
+        if old_device.last_seen_dts is None:
+            old_device.last_seen_dts = device.last_seen_dts
+        elif device.last_seen_dts > old_device.last_seen_dts:
+            old_device.last_seen_dts = device.last_seen_dts
+        if not old_device.vendor_company or not old_device.vendor_country:
+            old_device.set_vendor()
+        self._write_device(old_device)
+
+    def _write_device(self, device):
+        dump = json_pretty(device)
+        filename = 'device_{}.json'.format(device.device_mac.replace(':', '_'))
+        filepath = os.path.join(self.storage_dir, filename)
+        with open(filepath, 'w') as file:
+            file.write(dump)
 
 
-def _make_key(type, id):
-    return str(type) + str(id)
+def json_pretty(obj):
+    return json.dumps(obj.__jdict__(), indent=4, separators=(',', ': '))
+
+
+def json_compact(obj):
+    return json.dumps(obj.__jdict__(), separators=(',', ':'))

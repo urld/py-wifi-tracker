@@ -9,8 +9,6 @@ Usage:
 Options:
     -h --help           Show help.
     --debug             Print debugging messages.
-    --dump_dir=<dir>    Specifies the location where sniffing results should be
-                        dumped.
 
 Commands:
     sniff           Sniff probe requests sent by devices in your area.
@@ -38,6 +36,6 @@ if __name__ == "__main__":
     if args['sniff']:
         try:
             start_dts = datetime.datetime.now()
-            sniffer.sniff(args['<interface>'], dump_dir=args['--dump_dir'])
+            sniffer.sniff(args['<interface>'])
         except Exception as e:
             print e
