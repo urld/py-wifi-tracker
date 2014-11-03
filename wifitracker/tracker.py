@@ -25,9 +25,10 @@ class ProbeRequest(object):
                                                         self.signal_strength)
 
     def __jdict__(self):
+        dts = datetime.datetime.strftime(self.capture_dts,
+                                         '%Y-%m-%d %H:%M:%S.%f')
         return OrderedDict([('source_mac', self.source_mac),
-                            ('capture_dts', datetime.datetime.strftime(self.capture_dts,
-                                                                       '%Y-%m-%d %H:%M:%S.%f')),
+                            ('capture_dts', dts),
                             ('target_ssid', self.target_ssid),
                             ('signal_strength', self.signal_strength)])
 
@@ -47,7 +48,7 @@ class Device(object):
         try:
             vendor_response = requests.get(lookup_url).json()[0]
         except Exception as e:
-            log.error("Unable to lookup vendor.", e)
+            log.error("Unable to lookup vendor.", e.msg)
             raise e
         else:
             return vendor_response
@@ -72,10 +73,11 @@ class Device(object):
                                                    self.vendor_country)
 
     def __jdict__(self):
+        dts = datetime.datetime.strftime(self.last_seen_dts,
+                                         '%Y-%m-%d %H:%M:%S.%f')
         return OrderedDict([('device_mac', self.device_mac),
                             ('known_ssids', self.known_ssids),
-                            ('last_seen_dts', datetime.datetime.strftime(self.last_seen_dts,
-                                                                         '%Y-%m-%d %H:%M:%S.%f')),
+                            ('last_seen_dts', dts),
                             ('vendor_company', self.vendor_company),
                             ('vendor_country', self.vendor_country)])
 
@@ -117,10 +119,6 @@ class Tracker(object):
         with open(self.request_filename) as file:
             raw = file.readlines()
         all = [_load_request(r.rstrip('\n')) for r in raw if len(r) > 1]
-        for x in all:
-            if type(None) == type(x.capture_dts):
-                print x.__dict__
-        print load_dts
         return [e for e in all if e.capture_dts < load_dts]
 
 
@@ -131,8 +129,11 @@ def _load_request(dump):
                                                  '%Y-%m-%d %H:%M:%S.%f')
     except:
         capture_dts = None
+    target_ssid = decoded['target_ssid']
+    if target_ssid is not None:
+        target_ssid = repr(target_ssid)[2:-1]
     request = ProbeRequest(decoded['source_mac'], capture_dts,
-                           target_ssid=decoded['target_ssid'],
+                           target_ssid=target_ssid,
                            signal_strength=decoded['signal_strength'])
     return request
 
