@@ -146,10 +146,13 @@ def json_compact(obj):
     return json.dumps(obj.__jdict__(), separators=(',', ':'))
 
 
-def _lookup_vendor(device_mac):
-    lookup_url = 'https://www.macvendorlookup.com/api/v2/' + device_mac
+def _lookup_vendor(device_mac, session=None):
+    lookup_url = 'http://www.macvendorlookup.com/api/v2/' + device_mac
     try:
-        vendor_response = requests.get(lookup_url, timeout=20).json()[0]
+        if not session:
+            vendor_response = requests.get(lookup_url, timeout=20).json()[0]
+        else:
+            vendor_response = session.get(lookup_url, timeout=20).json()[0]
     except Exception as e:
         log.error("Unable to lookup vendor.", e.msg)
         raise e
@@ -163,24 +166,23 @@ from time import sleep
 
 class LookupThread(Thread):
 
-    def __init__(self, device):
+    def __init__(self, device, session):
         super(LookupThread, self).__init__()
         self.device = device
+        self.session = session
 
     def run(self):
         self.device.set_vendor()
 
 
-def set_vendors(devices):
+def set_vendors(devices, interval=2, slots=100):
     def alive_count(lst):
         alive_list = map(lambda x: 1 if x.isAlive() else 0, lst)
         # enable the following line if you want to see a funny stuff:
         # print alive_list
         return reduce(lambda a, b: a+b, alive_list)
-
-    threads = [LookupThread(devices[id]) for id in devices]
-    interval = 2
-    slots = 200
+    session = requests.Session()
+    threads = [LookupThread(devices[id], session) for id in devices]
     free = slots
     i = 0
     n = len(threads)
