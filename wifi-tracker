@@ -16,7 +16,7 @@ Options:
 
 Commands:
     sniff           Sniff probe requests sent by devices in your area.
-    show            Show all tracked devices.
+    show            Show tracked devices. (could take some time)
     kill            Kill the last startet sniffer process.
 """
 
@@ -27,6 +27,8 @@ import os
 from docopt import docopt
 from wifitracker import __version__
 
+PID_FILE = '/var/opt/wifi-tracker/pid.lock'
+DATA_DIR = '/var/opt/wifi-tracker'
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ if __name__ == "__main__":
     if args['sniff']:
         from wifitracker import sniffer
         log.info("PID: {}".format(os.getpid()))
-        with open('/var/opt/wifi-tracker/pid.lock', 'w') as file:
+        with open(PID_FILE, 'w') as file:
             file.write(str(os.getpid()))
         try:
             start_dts = datetime.datetime.now()
@@ -49,14 +51,14 @@ if __name__ == "__main__":
         except Exception as e:
             print e
     elif args['show']:
-        from wifitracker.tracker import Tracker, json_pretty
-        tracker = Tracker('/var/opt/wifi-tracker')
-        oui_lookup = not args['--nooui']
-        devices = tracker.get_devices(load_dts=datetime.datetime.now(),
-                                      oui_lookup=oui_lookup)
+        from wifitracker.tracker import Tracker, json_pretty, set_vendors
+        tracker = Tracker(DATA_DIR)
+        devices = tracker.get_devices(load_dts=datetime.datetime.now())
+        if not args['--nooui']:
+            set_vendors(devices)
         for id in devices:
             print json_pretty(devices[id])
     elif args['kill']:
-        with open('/var/opt/wifi-tracker/pid.lock', 'r') as file:
+        with open(PID_FILE, 'r') as file:
             pid = int(file.read())
         os.kill(pid, 9)

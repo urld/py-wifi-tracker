@@ -3,6 +3,8 @@ import datetime
 import json
 import logging
 import os.path
+from threading import Thread
+from time import sleep
 
 import requests
 
@@ -43,9 +45,9 @@ class Device(object):
         self.vendor_country = vendor_country
         self.last_seen_dts = last_seen_dts
 
-    def set_vendor(self):
+    def set_vendor(self, session=None):
         try:
-            vendor = _lookup_vendor(self.device_mac)
+            vendor = _lookup_vendor(self.device_mac, session)
             self.vendor_company = vendor['company']
             self.vendor_country = vendor['country']
         except:
@@ -87,7 +89,7 @@ class Tracker(object):
         with open(self.request_filename, 'a') as file:
             file.write('\n' + dump)
 
-    def get_devices(self, load_dts=None, oui_lookup=True):
+    def get_devices(self, load_dts=None):
         if not load_dts:
             load_dts = datetime.datetime.now()
         requests = self._read_requests(load_dts)
@@ -95,15 +97,14 @@ class Tracker(object):
         for request in requests:
             id = request.source_mac
             capture_dts = request.capture_dts
+            ssid = request.target_ssid
             if id not in devices:
                 devices[id] = Device(id, last_seen_dts=capture_dts)
                 log.debug("new device created: {}".format(devices[id]))
-            devices[id].add_ssid(request.target_ssid)
+            if ssid:
+                devices[id].add_ssid(ssid)
             if devices[id].last_seen_dts < capture_dts:
                 devices[id].last_seen_dts = capture_dts
-        if oui_lookup:
-            # this is done in parallel for all devices:
-            set_vendors(devices)
         return devices
 
     def _read_requests(self, load_dts):
@@ -128,7 +129,68 @@ def _load_request(dump):
     return request
 
 
+def _lookup_vendor(device_mac, session=requests.Session()):
+    lookup_url = 'https://www.macvendorlookup.com/api/v2/' + device_mac
+    try:
+        vendor_response = session.get(lookup_url, timeout=20).json()[0]
+    except Exception as e:
+        log.error("Unable to lookup vendor.", e.msg)
+        raise e
+    else:
+        return vendor_response
+
+
+def set_vendors(devices, interval=1, max_slots=100):
+    """Lookup the vendors for each device in a dict of devices.
+    The lookup requests are executed in parallel for better performance when
+    handling many devices.
+
+    Keyword arguments:
+    max_slots -- number of lookups which should be done in parallel
+    interval -- seconds between checks if a lookup finished
+    """
+
+    class VendorLookupThread(Thread):
+        """Helper class for concurrent vendor lookup."""
+
+        def __init__(self, device, session):
+            super(VendorLookupThread, self).__init__()
+            self.device = device
+            self.session = session
+
+        def run(self):
+            self.device.set_vendor(session)
+
+    # the session is used to reuse https connections:
+    session = requests.Session()
+    adapter = requests.adapters.HTTPAdapter(pool_connections=max_slots,
+                                            pool_maxsize=max_slots,
+                                            pool_block=True)
+    session.mount('https://', adapter)
+    # initialize one thread per device, but do not start them:
+    threads = [VendorLookupThread(devices[id], session) for id in devices]
+    slots = 0
+
+    # start a number of threads and wait for some of them to finish before
+    # starting more threads:
+    for i in xrange(0, len(threads)):
+        threads[i].start()
+        slots += 1
+        while slots >= max_slots:
+            # wait before checking for free slots:
+            sleep(interval)
+            # check how many threads already finished:
+            slots = sum([(1 if t.isAlive() else 0) for t in threads])
+    # wait for remaining threads:
+    while sum([(1 if t.isAlive() else 0) for t in threads]) > 0:
+        sleep(interval)
+    session.close()
+
+
 def _strptime(s):
+    """Parse datetime strings of the format 'YYYY-MM-DD hh:mm:ss.ssssss'.
+    This is less flexible but more performant than datetime.datetime.strptime.
+    """
     return datetime.datetime(year=int(s[:4]),
                              month=int(s[5:7]),
                              day=int(s[8:10]),
@@ -139,60 +201,10 @@ def _strptime(s):
 
 
 def json_pretty(obj):
+    """Generate pretty json string with indentions and spaces."""
     return json.dumps(obj.__jdict__(), indent=4, separators=(',', ': '))
 
 
 def json_compact(obj):
+    """Generate compact json string without whitespaces."""
     return json.dumps(obj.__jdict__(), separators=(',', ':'))
-
-
-def _lookup_vendor(device_mac, session=None):
-    lookup_url = 'http://www.macvendorlookup.com/api/v2/' + device_mac
-    try:
-        if not session:
-            vendor_response = requests.get(lookup_url, timeout=20).json()[0]
-        else:
-            vendor_response = session.get(lookup_url, timeout=20).json()[0]
-    except Exception as e:
-        log.error("Unable to lookup vendor.", e.msg)
-        raise e
-    else:
-        return vendor_response
-
-
-from threading import Thread
-from time import sleep
-
-
-class LookupThread(Thread):
-
-    def __init__(self, device, session):
-        super(LookupThread, self).__init__()
-        self.device = device
-        self.session = session
-
-    def run(self):
-        self.device.set_vendor()
-
-
-def set_vendors(devices, interval=2, slots=100):
-    def alive_count(lst):
-        alive_list = map(lambda x: 1 if x.isAlive() else 0, lst)
-        # enable the following line if you want to see a funny stuff:
-        # print alive_list
-        return reduce(lambda a, b: a+b, alive_list)
-    session = requests.Session()
-    threads = [LookupThread(devices[id], session) for id in devices]
-    free = slots
-    i = 0
-    n = len(threads)
-    for i in range(i, n):
-        threads[i].start()
-        free -= 1
-        # wait for free slots:
-        while free <= 0:
-            sleep(interval)
-            free = slots - alive_count(threads)
-    # wait for threads:
-    while alive_count(threads) > 0:
-        sleep(interval)
