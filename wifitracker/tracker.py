@@ -125,9 +125,8 @@ class Tracker(object):
     def _read_requests(self, load_dts):
         with open(self.request_filename) as file:
             raw = file.readlines()
-        lines = [r.rstrip('\n') for r in raw if len(r) > 1]
-        dump = '[' + ','.join(lines) + ']'
-        all = _load_requests(dump)
+        lines = [r for r in raw if len(r) > 1]
+        all = _load_requests('[' + ','.join(lines) + ']')
         return [e for e in all if e.capture_dts < load_dts]
 
 
