@@ -10,6 +10,7 @@ Requirements
 - tcpdump
 - airmon-ng (or something else to put your wifi card in monitor mode)
 - Python 2.7:
+  
   - scapy 2.1.0
   - requests 2.4.3
 

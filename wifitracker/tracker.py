@@ -125,23 +125,28 @@ class Tracker(object):
     def _read_requests(self, load_dts):
         with open(self.request_filename) as file:
             raw = file.readlines()
-        all = [_load_request(r.rstrip('\n')) for r in raw if len(r) > 1]
+        lines = [r.rstrip('\n') for r in raw if len(r) > 1]
+        dump = '[' + ','.join(lines) + ']'
+        all = _load_requests(dump)
         return [e for e in all if e.capture_dts < load_dts]
 
 
-def _load_request(dump):
+def _load_requests(dump):
     decoded = json.loads(dump)
-    try:
-        capture_dts = _strptime(decoded['capture_dts'])
-    except:
-        capture_dts = None
-    target_ssid = decoded['target_ssid']
-    if target_ssid:
-        target_ssid = repr(target_ssid)[2:-1]
-    request = ProbeRequest(decoded['source_mac'], capture_dts,
-                           target_ssid=target_ssid,
-                           signal_strength=decoded['signal_strength'])
-    return request
+    requests = []
+    for d in decoded:
+        try:
+            capture_dts = _strptime(d['capture_dts'])
+        except:
+            capture_dts = None
+        target_ssid = d['target_ssid']
+        if target_ssid:
+            target_ssid = repr(target_ssid)[2:-1]
+        request = ProbeRequest(d['source_mac'], capture_dts,
+                               target_ssid=target_ssid,
+                               signal_strength=d['signal_strength'])
+        requests.append(request)
+    return requests
 
 
 def _lookup_vendor(device_mac, session=requests.Session()):
