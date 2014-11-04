@@ -149,7 +149,7 @@ def json_compact(obj):
 def _lookup_vendor(device_mac):
     lookup_url = 'https://www.macvendorlookup.com/api/v2/' + device_mac
     try:
-        vendor_response = requests.get(lookup_url, timeout=15).json()[0]
+        vendor_response = requests.get(lookup_url, timeout=20).json()[0]
     except Exception as e:
         log.error("Unable to lookup vendor.", e.msg)
         raise e
@@ -174,19 +174,23 @@ class LookupThread(Thread):
 def set_vendors(devices):
     def alive_count(lst):
         alive_list = map(lambda x: 1 if x.isAlive() else 0, lst)
-        print alive_list
+        # enable the following line if you want to see a funny stuff:
+        # print alive_list
         return reduce(lambda a, b: a+b, alive_list)
 
     threads = [LookupThread(devices[id]) for id in devices]
     interval = 2
-    batch = 200
+    slots = 200
+    free = slots
     i = 0
     n = len(threads)
     for i in range(i, n):
         threads[i].start()
+        free -= 1
         # wait for free slots:
-        while alive_count(threads) > batch:
+        while free <= 0:
             sleep(interval)
+            free = slots - alive_count(threads)
     # wait for threads:
     while alive_count(threads) > 0:
         sleep(interval)
