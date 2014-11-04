@@ -2,12 +2,21 @@
 README
 ======
 
-TODO
+Track wifi devices based on their public probe requests.
+
+Requirements
+============
+
+- tcpdump
+- airmon-ng (or something else to put your wifi card in monitor mode)
+- Python 2.7:
+  - scapy 2.1.0
+  - requests 2.4.3
 
 Installation
 ============
 
-Install dependencies on debian::
+Install dependencies (on debian in this case)::
 
     # apt-get install libssl-dev tcpdump iw
     # wget http://download.aircrack-ng.org/aircrack-ng-1.2-beta1.tar.gz
@@ -27,24 +36,16 @@ Install required python libraries::
     # cd scapy-2.1.0
     # python setup.py install
 
-::
 
-    $ pip install wifi-tracker
-
-Requirements
-============
-
-* tcpdump
-* airmon-ng
-* Python:
-** scapy 2.1.0
-** requests
 
 Usage
 =====
 
+You should do all of this as privileged user, or the monitor device might not be accessible.
+
 Setup::
-    $ sudo airmon-ng start wlan0
+
+    $ airmon-ng start wlan0
 
 Sniff probe requests::
 
@@ -52,9 +53,11 @@ Sniff probe requests::
 
 Kill sniffer::
 
-    $ sudo kill -9 <pid>
+    $ wifi-tracker kill <pid>
 
-The pid is logged when wifi-tracker starts
+Generate a list of tracked devices after some sniffing::
+
+    $ wifi-tracker show
 
 Features
 ========

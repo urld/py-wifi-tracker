@@ -46,6 +46,13 @@ class Device(object):
         self.last_seen_dts = last_seen_dts
 
     def set_vendor(self, session=None):
+        """Set the vendor of this device. The vendor can be looked up by the
+        devices mac address.
+
+        Keyword arguments:
+        session -- HTTPS session with connections which should be reused for the
+                   requests neccesary for the lookup.
+        """
         try:
             vendor = _lookup_vendor(self.device_mac, session)
             self.vendor_company = vendor['company']
@@ -55,6 +62,10 @@ class Device(object):
             self.vendor_country = None
 
     def add_ssid(self, ssid):
+        """Add a new SSID to the device.
+
+        ssid -- string object
+        """
         if ssid and ssid not in self.known_ssids:
             self.known_ssids.append(ssid)
             log.debug('SSID added to device:{}'.format(ssid))
@@ -81,6 +92,9 @@ class Tracker(object):
         self.request_filename = os.path.join(self.storage_dir, 'requests')
 
     def add_request(self, request):
+        """Add the captured request to the tracker. The tracker might store this
+        request in a file or database backend.
+        """
         # TODO: store in mongodb/send over REST
         self._write_request(request)
 
@@ -90,6 +104,7 @@ class Tracker(object):
             file.write('\n' + dump)
 
     def get_devices(self, load_dts=None):
+        """Load a version of all devices valid at the given timestamp."""
         if not load_dts:
             load_dts = datetime.datetime.now()
         requests = self._read_requests(load_dts)
@@ -121,7 +136,7 @@ def _load_request(dump):
     except:
         capture_dts = None
     target_ssid = decoded['target_ssid']
-    if target_ssid is not None:
+    if target_ssid:
         target_ssid = repr(target_ssid)[2:-1]
     request = ProbeRequest(decoded['source_mac'], capture_dts,
                            target_ssid=target_ssid,
