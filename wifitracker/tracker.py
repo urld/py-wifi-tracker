@@ -43,19 +43,9 @@ class Device(object):
         self.vendor_country = vendor_country
         self.last_seen_dts = last_seen_dts
 
-    def _lookup_vendor(self):
-        lookup_url = 'https://www.macvendorlookup.com/api/v2/' + self.device_mac
-        try:
-            vendor_response = requests.get(lookup_url).json()[0]
-        except Exception as e:
-            log.error("Unable to lookup vendor.", e.msg)
-            raise e
-        else:
-            return vendor_response
-
     def set_vendor(self):
         try:
-            vendor = self._lookup_vendor()
+            vendor = _lookup_vendor(self.device_mac)
             self.vendor_company = vendor['company']
             self.vendor_country = vendor['country']
         except:
@@ -107,12 +97,13 @@ class Tracker(object):
             capture_dts = request.capture_dts
             if id not in devices:
                 devices[id] = Device(id, last_seen_dts=capture_dts)
-                if oui_lookup:
-                    devices[id].set_vendor()
                 log.debug("new device created: {}".format(devices[id]))
             devices[id].add_ssid(request.target_ssid)
             if devices[id].last_seen_dts < capture_dts:
                 devices[id].last_seen_dts = capture_dts
+        if oui_lookup:
+            # this is done in parallel for all devices:
+            set_vendors(devices)
         return devices
 
     def _read_requests(self, load_dts):
@@ -153,3 +144,49 @@ def json_pretty(obj):
 
 def json_compact(obj):
     return json.dumps(obj.__jdict__(), separators=(',', ':'))
+
+
+def _lookup_vendor(device_mac):
+    lookup_url = 'https://www.macvendorlookup.com/api/v2/' + device_mac
+    try:
+        vendor_response = requests.get(lookup_url, timeout=15).json()[0]
+    except Exception as e:
+        log.error("Unable to lookup vendor.", e.msg)
+        raise e
+    else:
+        return vendor_response
+
+
+from threading import Thread
+from time import sleep
+
+
+class LookupThread(Thread):
+
+    def __init__(self, device):
+        super(LookupThread, self).__init__()
+        self.device = device
+
+    def run(self):
+        self.device.set_vendor()
+
+
+def set_vendors(devices):
+    def alive_count(lst):
+        alive_list = map(lambda x: 1 if x.isAlive() else 0, lst)
+        print alive_list
+        return reduce(lambda a, b: a+b, alive_list)
+
+    threads = [LookupThread(devices[id]) for id in devices]
+    interval = 2
+    batch = 200
+    i = 0
+    n = len(threads)
+    for i in range(i, n):
+        threads[i].start()
+        # wait for free slots:
+        while alive_count(threads) > batch:
+            sleep(interval)
+    # wait for threads:
+    while alive_count(threads) > 0:
+        sleep(interval)
