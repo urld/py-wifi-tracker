@@ -125,8 +125,7 @@ class Tracker(object):
 def _load_request(dump):
     decoded = json.loads(dump)
     try:
-        capture_dts = datetime.datetime.strptime(decoded['capture_dts'],
-                                                 '%Y-%m-%d %H:%M:%S.%f')
+        capture_dts = _strptime(decoded['capture_dts'])
     except:
         capture_dts = None
     target_ssid = decoded['target_ssid']
@@ -136,6 +135,16 @@ def _load_request(dump):
                            target_ssid=target_ssid,
                            signal_strength=decoded['signal_strength'])
     return request
+
+
+def _strptime(s):
+    return datetime.datetime(year=int(s[:4]),
+                             month=int(s[5:7]),
+                             day=int(s[8:10]),
+                             hour=int(s[11:13]),
+                             minute=int(s[14:16]),
+                             second=int(s[17:19]),
+                             microsecond=int(s[20:26]))
 
 
 def json_pretty(obj):
