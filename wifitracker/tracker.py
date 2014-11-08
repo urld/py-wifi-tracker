@@ -85,6 +85,29 @@ class Device(object):
                             ('vendor_country', self.vendor_country)])
 
 
+class Station(object):
+
+    def __init__(self, ssid, associated_devices=None):
+        self.ssid = ssid
+        self.associated_devices = []
+        if associated_devices:
+            self.associated_devices = associated_devices
+
+    def add_device(self, device_mac):
+        """Add a known assoiciated device to the station."""
+        if device_mac and device_mac not in self.associated_devices:
+            self.associated_devices.append(device_mac)
+            log.debug("Device added to station:{}@'{}'".format(device_mac,
+                                                               self.ssid))
+
+    def __str__(self):
+        return "SSID='{}'".format(self.ssid)
+
+    def __jdict__(self):
+        return OrderedDict([('ssid', self.ssid),
+                            ('associated_devices', self.associated_devices)])
+
+
 class Tracker(object):
 
     def __init__(self, storage_dir):
@@ -105,8 +128,6 @@ class Tracker(object):
 
     def get_devices(self, load_dts=None):
         """Load a version of all devices valid at the given timestamp."""
-        if not load_dts:
-            load_dts = datetime.datetime.now()
         requests = self._read_requests(load_dts)
         devices = {}
         for request in requests:
@@ -122,7 +143,23 @@ class Tracker(object):
                 devices[id].last_seen_dts = capture_dts
         return devices
 
-    def _read_requests(self, load_dts):
+    def get_stations(self, load_dts=None):
+        """Load a version of all stations valid at the given timestamp."""
+        requests = self._read_requests(load_dts)
+        stations = {}
+        for request in requests:
+            ssid = request.target_ssid
+            device_mac = request.source_mac
+            if ssid:
+                if ssid not in stations:
+                    stations[ssid] = Station(ssid)
+                    log.debug("new station created: {}".format(stations[ssid]))
+                stations[ssid].add_device(device_mac)
+        return stations
+
+    def _read_requests(self, load_dts=None):
+        if not load_dts:
+            load_dts = datetime.datetime.now()
         with open(self.request_filename) as file:
             raw = file.readlines()
         lines = [r for r in raw if len(r) > 1]

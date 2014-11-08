@@ -3,7 +3,7 @@
 
 Usage:
     {basename} sniff <interface> [options]
-    {basename} show [<device_mac>] [options]
+    {basename} show (devices|stations) [options]
     {basename} kill
     {basename} -h | --help
     {basename} --version
@@ -16,7 +16,8 @@ Options:
 
 Commands:
     sniff           Sniff probe requests sent by devices in your area.
-    show            Show tracked devices. (could take some time)
+    show            Show tracked devices or wifi stations.
+                    (this operation could take some time)
     kill            Kill the last startet sniffer process.
 """
 
@@ -53,11 +54,17 @@ if __name__ == "__main__":
     elif args['show']:
         from wifitracker.tracker import Tracker, json_pretty, set_vendors
         tracker = Tracker(DATA_DIR)
-        devices = tracker.get_devices(load_dts=datetime.datetime.now())
-        if not args['--nooui']:
-            set_vendors(devices)
-        for id in devices:
-            print json_pretty(devices[id])
+        if args['devices']:
+            devices = tracker.get_devices(load_dts=datetime.datetime.now())
+            if not args['--nooui']:
+                set_vendors(devices)
+            for id in devices:
+                print json_pretty(devices[id])
+        elif args['stations']:
+            stations = tracker.get_stations(load_dts=datetime.datetime.now())
+            for id in stations:
+                print json_pretty(stations[id])
+
     elif args['kill']:
         with open(PID_FILE, 'r') as file:
             pid = int(file.read())
