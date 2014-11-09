@@ -7,6 +7,8 @@ import os.path
 from threading import Thread
 from time import sleep
 from itertools import islice
+
+# http requests for humans:
 import requests
 
 log = logging.getLogger(__name__)
@@ -189,26 +191,19 @@ class Tracker(object):
                 for d in aliases:
                     writer.writerow([d, aliases[d]])
 
-    def _read_requests(self, load_dts=None):
+    def _read_requests_chunk(self, load_dts=None, chunk_size=10000):
         if not load_dts:
             load_dts = datetime.datetime.now()
         with open(self.request_filename) as file:
-            raw = file.readlines()
-        lines = [r for r in raw if len(r) > 1]
-        all = _load_requests('[' + ','.join(lines) + ']')
-        return [e for e in all if e.capture_dts < load_dts]
-
-    def _read_requests_chunk(self, load_dts=None):
-        if not load_dts:
-            load_dts = datetime.datetime.now()
-        with open(self.request_filename) as file:
-            n = 10000
             while True:
-                raw = list(islice(file, n))
-                if not raw:
+                chunk = list(islice(file, chunk_size))
+                if not chunk:
                     break
-                lines = [r for r in raw if len(r) > 1]
+                lines = [line for line in chunk if len(line) > 1]
                 all = _load_requests('[' + ','.join(lines) + ']')
+                if all[0].capture_dts > load_dts:
+                    # abort since we assume the requests are sorted
+                    break
                 yield [e for e in all if e.capture_dts < load_dts]
 
 

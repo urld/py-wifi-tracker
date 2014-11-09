@@ -93,7 +93,7 @@ if __name__ == "__main__":
                                      force=args['--force'])
         except ValueError:
             print "ERROR: Alias for device {} already set."
-            print "\t Use --force to set new alias"
+            print "\t Use --force to set new alias."
             sys.exit(1)
         except IOError as e:
             print e
