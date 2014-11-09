@@ -6,7 +6,7 @@ import logging
 import os.path
 from threading import Thread
 from time import sleep
-
+from itertools import islice
 import requests
 
 log = logging.getLogger(__name__)
@@ -138,22 +138,22 @@ class Tracker(object):
 
     def get_devices(self, load_dts=None, aliases=None):
         """Load a version of all devices valid at the given timestamp."""
-        requests = self._read_requests(load_dts)
         devices = {}
         aliases = {} if not aliases else aliases
-        for request in requests:
-            id = request.source_mac
-            capture_dts = request.capture_dts
-            ssid = request.target_ssid
-            if id not in devices:
-                devices[id] = Device(id, last_seen_dts=capture_dts)
-                log.debug("new device created: {}".format(devices[id]))
-                if id in aliases:
-                    devices[id].set_alias(aliases[id])
-            if ssid:
-                devices[id].add_ssid(ssid)
-            if devices[id].last_seen_dts < capture_dts:
-                devices[id].last_seen_dts = capture_dts
+        for request_chunk in self._read_requests_chunk(load_dts):
+            for request in request_chunk:
+                id = request.source_mac
+                capture_dts = request.capture_dts
+                ssid = request.target_ssid
+                if id not in devices:
+                    devices[id] = Device(id, last_seen_dts=capture_dts)
+                    log.debug("new device created: {}".format(devices[id]))
+                    if id in aliases:
+                        devices[id].set_alias(aliases[id])
+                if ssid:
+                    devices[id].add_ssid(ssid)
+                if devices[id].last_seen_dts < capture_dts:
+                    devices[id].last_seen_dts = capture_dts
         return devices
 
     def get_stations(self, load_dts=None):
@@ -198,6 +198,19 @@ class Tracker(object):
         all = _load_requests('[' + ','.join(lines) + ']')
         return [e for e in all if e.capture_dts < load_dts]
 
+    def _read_requests_chunk(self, load_dts=None):
+        if not load_dts:
+            load_dts = datetime.datetime.now()
+        with open(self.request_filename) as file:
+            n = 10000
+            while True:
+                raw = list(islice(file, n))
+                if not raw:
+                    break
+                lines = [r for r in raw if len(r) > 1]
+                all = _load_requests('[' + ','.join(lines) + ']')
+                yield [e for e in all if e.capture_dts < load_dts]
+
 
 def _load_requests(dump):
     decoded = json.loads(dump)
@@ -220,7 +233,7 @@ def _load_requests(dump):
 def _lookup_vendor(device_mac, session=requests.Session()):
     lookup_url = 'https://www.macvendorlookup.com/api/v2/' + device_mac
     try:
-        vendor_response = session.get(lookup_url, timeout=20).json()[0]
+        vendor_response = session.get(lookup_url, timeout=10).json()[0]
     except Exception as e:
         log.error("Unable to lookup vendor.", e.msg)
         raise e
