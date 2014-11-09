@@ -147,7 +147,7 @@ class Tracker(object):
                 ssid = request.target_ssid
                 if id not in devices:
                     devices[id] = Device(id, last_seen_dts=capture_dts)
-                    log.debug("new device created: {}".format(devices[id]))
+                    log.debug("new device: {}".format(devices[id]))
                     if id in aliases:
                         devices[id].set_alias(aliases[id])
                 if ssid:
@@ -158,16 +158,16 @@ class Tracker(object):
 
     def get_stations(self, load_dts=None):
         """Load a version of all stations valid at the given timestamp."""
-        requests = self._read_requests(load_dts)
         stations = {}
-        for request in requests:
-            ssid = request.target_ssid
-            device_mac = request.source_mac
-            if ssid:
-                if ssid not in stations:
-                    stations[ssid] = Station(ssid)
-                    log.debug("new station created: {}".format(stations[ssid]))
-                stations[ssid].add_device(device_mac)
+        for request_chunk in self._read_requests_chunk(load_dts):
+            for request in request_chunk:
+                ssid = request.target_ssid
+                device_mac = request.source_mac
+                if ssid:
+                    if ssid not in stations:
+                        stations[ssid] = Station(ssid)
+                        log.debug("new station: {}".format(stations[ssid]))
+                    stations[ssid].add_device(device_mac)
         return stations
 
     def get_aliases(self):
