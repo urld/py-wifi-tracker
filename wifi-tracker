@@ -1,9 +1,10 @@
 #!/usr/bin/python
-"""Wifi Tracker.
+"""wifi-tracker: Track wifi devices in your area.
 
 Usage:
     {basename} sniff <interface> [options]
-    {basename} show (devices|stations) [options]
+    {basename} show (devices|stations|aliases) [options]
+    {basename} set <device_mac> <alias> [--force]
     {basename} kill
     {basename} -h | --help
     {basename} --version
@@ -13,17 +14,20 @@ Options:
     --debug             Print debugging messages.
     --nooui             Omit OUI vendor lookup. This might be usefull if
                         no internet connection is availaible.
+    --noalias           Ignore alias file.
 
 Commands:
     sniff           Sniff probe requests sent by devices in your area.
     show            Show tracked devices or wifi stations.
                     (this operation could take some time)
+    set             Set an alias for a known device.
     kill            Kill the last startet sniffer process.
 """
 
 import datetime
 import logging
 import os
+import sys
 
 from docopt import docopt
 from wifitracker import __version__
@@ -55,7 +59,17 @@ if __name__ == "__main__":
         from wifitracker.tracker import Tracker, json_pretty, set_vendors
         tracker = Tracker(DATA_DIR)
         if args['devices']:
-            devices = tracker.get_devices(load_dts=datetime.datetime.now())
+            if not args['--noalias']:
+                try:
+                    aliases = tracker.get_aliases()
+                except IOError as e:
+                    print e
+                    print "Try again with --noalias."
+                    sys.exit(1)
+            else:
+                aliases = {}
+            devices = tracker.get_devices(load_dts=datetime.datetime.now(),
+                                          aliases=aliases)
             if not args['--nooui']:
                 set_vendors(devices)
             for id in devices:
@@ -64,6 +78,26 @@ if __name__ == "__main__":
             stations = tracker.get_stations(load_dts=datetime.datetime.now())
             for id in stations:
                 print json_pretty(stations[id])
+        elif args['aliases']:
+            try:
+                aliases = tracker.get_aliases()
+                print aliases
+            except IOError as e:
+                print e
+                sys.exit(1)
+    elif args['set']:
+        from wifitracker.tracker import Tracker
+        tracker = Tracker(DATA_DIR)
+        try:
+            tracker.set_device_alias(args['<device_mac>'], args['<alias>'],
+                                     force=args['--force'])
+        except ValueError:
+            print "ERROR: Alias for device {} already set."
+            print "\t Use --force to set new alias"
+            sys.exit(1)
+        except IOError as e:
+            print e
+            sys.exit(1)
 
     elif args['kill']:
         with open(PID_FILE, 'r') as file:

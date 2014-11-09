@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import csv
 import datetime
 import json
 import logging
@@ -38,12 +39,13 @@ class ProbeRequest(object):
 class Device(object):
 
     def __init__(self, device_mac, last_seen_dts=None, known_ssids=None,
-                 vendor_company=None, vendor_country=None):
+                 vendor_company=None, vendor_country=None, alias=None):
         self.device_mac = device_mac
         self.known_ssids = known_ssids if known_ssids else []
         self.vendor_company = vendor_company
         self.vendor_country = vendor_country
         self.last_seen_dts = last_seen_dts
+        self.alias = alias
 
     def set_vendor(self, session=None):
         """Set the vendor of this device. The vendor can be looked up by the
@@ -60,6 +62,12 @@ class Device(object):
         except:
             self.vendor_company = None
             self.vendor_country = None
+
+    def set_alias(self, alias):
+        if not self.alias:
+            self.alias = alias
+            log.debug("Set alias of device ({}) to: {}".format(self.device_mac,
+                                                               self.alias))
 
     def add_ssid(self, ssid):
         """Add a new SSID to the device.
@@ -79,6 +87,7 @@ class Device(object):
         dts = datetime.datetime.strftime(self.last_seen_dts,
                                          '%Y-%m-%d %H:%M:%S.%f')
         return OrderedDict([('device_mac', self.device_mac),
+                            ('alias', self.alias),
                             ('known_ssids', self.known_ssids),
                             ('last_seen_dts', dts),
                             ('vendor_company', self.vendor_company),
@@ -113,6 +122,7 @@ class Tracker(object):
     def __init__(self, storage_dir):
         self.storage_dir = storage_dir
         self.request_filename = os.path.join(self.storage_dir, 'requests')
+        self.alias_filename = os.path.join(self.storage_dir, 'aliases.csv')
 
     def add_request(self, request):
         """Add the captured request to the tracker. The tracker might store this
@@ -126,10 +136,11 @@ class Tracker(object):
         with open(self.request_filename, 'a') as file:
             file.write('\n' + dump)
 
-    def get_devices(self, load_dts=None):
+    def get_devices(self, load_dts=None, aliases=None):
         """Load a version of all devices valid at the given timestamp."""
         requests = self._read_requests(load_dts)
         devices = {}
+        aliases = {} if not aliases else aliases
         for request in requests:
             id = request.source_mac
             capture_dts = request.capture_dts
@@ -137,6 +148,8 @@ class Tracker(object):
             if id not in devices:
                 devices[id] = Device(id, last_seen_dts=capture_dts)
                 log.debug("new device created: {}".format(devices[id]))
+                if id in aliases:
+                    devices[id].set_alias(aliases[id])
             if ssid:
                 devices[id].add_ssid(ssid)
             if devices[id].last_seen_dts < capture_dts:
@@ -156,6 +169,25 @@ class Tracker(object):
                     log.debug("new station created: {}".format(stations[ssid]))
                 stations[ssid].add_device(device_mac)
         return stations
+
+    def get_aliases(self):
+        aliases = {}
+        with open(self.alias_filename, 'rb') as csvfile:
+            reader = csv.reader(csvfile, delimiter=';', quotechar='"')
+            for row in reader:
+                aliases[row[0]] = row[1]
+        return aliases
+
+    def set_device_alias(self, device_mac, alias, force=False):
+        aliases = self.get_aliases()
+        if not force and device_mac in aliases:
+            raise ValueError("Device alias already set.")
+        else:
+            aliases[device_mac] = alias
+            with open(self.alias_filename, 'wb') as csvfile:
+                writer = csv.writer(csvfile, delimiter=';', quotechar='"')
+                for d in aliases:
+                    writer.writerow([d, aliases[d]])
 
     def _read_requests(self, load_dts=None):
         if not load_dts:
