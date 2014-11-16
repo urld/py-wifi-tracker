@@ -158,6 +158,21 @@ class Tracker(object):
                     devices[id].last_seen_dts = capture_dts
         return devices
 
+    def get_device(self, device_mac, load_dts=None, alias=None):
+        device = Device(device_mac, alias=alias)
+        for request_chunk in self._read_requests_chunk(load_dts):
+            device_requests = [r for r in request_chunk
+                               if r.source_mac == device_mac]
+            for request in device_requests:
+                if request.target_ssid:
+                    device.add_ssid(request.target_ssid)
+            try:
+                device.last_seen_dts = device_requests[-1].capture_dts
+            except IndexError:
+                # ignore if list is empty
+                pass
+        return device
+
     def get_stations(self, load_dts=None):
         """Load a version of all stations valid at the given timestamp."""
         stations = {}
