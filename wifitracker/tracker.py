@@ -61,7 +61,7 @@ class Device(object):
             vendor = _lookup_vendor(self.device_mac, session)
             self.vendor_company = vendor['company']
             self.vendor_country = vendor['country']
-        except:
+        except Exception:
             self.vendor_company = None
             self.vendor_country = None
 
@@ -187,6 +187,16 @@ class Tracker(object):
                     stations[ssid].add_device(device_mac)
         return stations
 
+    def get_station(self, ssid, load_dts=None):
+        station = Station(ssid)
+        for request_chunk in self._read_requests_chunk(load_dts):
+            station_requests = [r for r in request_chunk
+                                if r.target_ssid == ssid]
+            for request in station_requests:
+                device_mac = request.source_mac
+                station.add_device(device_mac)
+        return station
+
     def get_aliases(self):
         aliases = {}
         with open(self.alias_filename, 'rb') as csvfile:
@@ -240,12 +250,13 @@ def _load_requests(dump):
     return requests
 
 
-def _lookup_vendor(device_mac, session=requests.Session()):
+def _lookup_vendor(device_mac, session=None):
+    session = session if session else requests.Session()
     lookup_url = 'https://www.macvendorlookup.com/api/v2/' + device_mac
     try:
         vendor_response = session.get(lookup_url, timeout=10).json()[0]
     except Exception as e:
-        log.error("Unable to lookup vendor.", e.msg)
+        log.error("Unable to lookup vendor.", e)
         raise e
     else:
         return vendor_response

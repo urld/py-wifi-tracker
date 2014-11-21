@@ -50,6 +50,7 @@ def packet_handler(packet):
             try:
                 TRACKER.add_request(request)
             except Exception as e:
+                print e
                 log.error('Unable to add request', e)
 
 

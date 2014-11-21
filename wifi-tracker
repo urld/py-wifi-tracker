@@ -45,6 +45,45 @@ def print_jsons(object_dict):
     print ']'
 
 
+def show_devices(tracker, args):
+    # read aliases:
+    if not args['--noalias']:
+        try:
+            aliases = tracker.get_aliases()
+        except IOError as e:
+            print e
+            print "Try again with --noalias."
+            sys.exit(1)
+    else:
+        aliases = {}
+    # get all devices:
+    if not args['<id>']:
+        devices = tracker.get_devices(load_dts=datetime.datetime.now(),
+                                      aliases=aliases)
+        if not args['--nooui']:
+            set_vendors(devices)
+        print_jsons(devices)
+    # get only one device:
+    else:
+        id = args['<id>']
+        alias = aliases[id] if id in aliases else None
+        device = tracker.get_device(id,
+                                    load_dts=datetime.datetime.now(),
+                                    alias=alias)
+        device.set_vendor()
+        print_jsons({id: device})
+
+
+def show_stations(tracker, args):
+    if not args['<id>']:
+        stations = tracker.get_stations(load_dts=datetime.datetime.now())
+        print_jsons(stations)
+    else:
+        id = args['<id>']
+        station = tracker.get_station(id, load_dts=datetime.datetime.now())
+        print_jsons({id: station})
+
+
 if __name__ == "__main__":
     # parse commandline options:
     args = docopt(__doc__.format(basename=__file__), version=__version__)
@@ -67,30 +106,9 @@ if __name__ == "__main__":
         from wifitracker.tracker import Tracker, json_pretty, set_vendors
         tracker = Tracker(DATA_DIR)
         if args['devices']:
-            if not args['--noalias']:
-                try:
-                    aliases = tracker.get_aliases()
-                except IOError as e:
-                    print e
-                    print "Try again with --noalias."
-                    sys.exit(1)
-            else:
-                aliases = {}
-            if not args['<id>']:
-                devices = tracker.get_devices(load_dts=datetime.datetime.now(),
-                                              aliases=aliases)
-                if not args['--nooui']:
-                    set_vendors(devices)
-            else:
-                id = args['<id>']
-                devices = {id: tracker.get_device(id, load_dts=datetime.datetime.now())}
-                if not args['--nooui']:
-                    if devices[id] is not None:
-                        devices[id].set_vendor()
-            print_jsons(devices)
+            show_devices(tracker, args)
         elif args['stations']:
-            stations = tracker.get_stations(load_dts=datetime.datetime.now())
-            print_jsons(stations)
+            show_stations(tracker, args)
         elif args['aliases']:
             try:
                 aliases = tracker.get_aliases()
