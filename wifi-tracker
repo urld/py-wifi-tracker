@@ -84,6 +84,18 @@ def show_stations(tracker, args):
         print_jsons({id: station})
 
 
+def start_sniffer(args):
+    from wifitracker import sniffer
+    pid = os.getpid()
+    log.info("PID: {}".format(pid))
+    with open(PID_FILE, 'w') as file:
+        file.write(str(pid))
+    try:
+        sniffer.sniff(args['<interface>'])
+    except Exception as e:
+        print e
+
+
 if __name__ == "__main__":
     # parse commandline options:
     args = docopt(__doc__.format(basename=__file__), version=__version__)
@@ -93,15 +105,7 @@ if __name__ == "__main__":
 
     # execute command:
     if args['sniff']:
-        from wifitracker import sniffer
-        log.info("PID: {}".format(os.getpid()))
-        with open(PID_FILE, 'w') as file:
-            file.write(str(os.getpid()))
-        try:
-            start_dts = datetime.datetime.now()
-            sniffer.sniff(args['<interface>'])
-        except Exception as e:
-            print e
+        start_sniffer(args)
     elif args['show']:
         from wifitracker.tracker import Tracker, json_pretty, set_vendors
         tracker = Tracker(DATA_DIR)
