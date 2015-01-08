@@ -62,6 +62,7 @@ class Device(object):
             self.vendor_company = vendor['company']
             self.vendor_country = vendor['country']
         except Exception:
+            log.warn("Unable to lookup vendor for: {}".format(self.device_mac))
             self.vendor_company = None
             self.vendor_country = None
 
@@ -219,17 +220,33 @@ class Tracker(object):
     def _read_requests_chunk(self, load_dts=None, chunk_size=10000):
         if not load_dts:
             load_dts = datetime.datetime.now()
+        chunk_no = 0
         with open(self.request_filename) as file:
             while True:
                 chunk = list(islice(file, chunk_size))
                 if not chunk:
                     break
+                chunk_no += 1
                 lines = [line for line in chunk if len(line) > 1]
-                all = _load_requests('[' + ','.join(lines) + ']')
+                try:
+                    all = _load_requests('[' + ','.join(lines) + ']')
+                except:
+                    # try to decode line by line
+                    all = []
+                    i = 0
+                    for line in lines:
+                        i += 1
+                        try:
+                            all += _load_requests('[' + line + ']')
+                        except Exception:
+                            # ignore erroneous lines
+                            line_no = chunk_size * (chunk_no - 1) + i
+                            log.error("Unable to decode line at {}:{}".format(
+                                self.request_filename, line_no))
                 if all[0].capture_dts > load_dts:
                     # abort since we assume the requests are sorted
                     break
-                yield [e for e in all if e.capture_dts < load_dts]
+                yield [r for r in all if r.capture_dts < load_dts]
 
 
 def _load_requests(dump):
@@ -253,13 +270,8 @@ def _load_requests(dump):
 def _lookup_vendor(device_mac, session=None):
     session = session if session else requests.Session()
     lookup_url = 'https://www.macvendorlookup.com/api/v2/' + device_mac
-    try:
-        vendor_response = session.get(lookup_url, timeout=10).json()[0]
-    except Exception as e:
-        log.error("Unable to lookup vendor.", e)
-        raise e
-    else:
-        return vendor_response
+    vendor_response = session.get(lookup_url, timeout=10).json()[0]
+    return vendor_response
 
 
 def set_vendors(devices, interval=1, max_slots=100):
