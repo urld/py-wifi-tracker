@@ -87,13 +87,23 @@ def show_stations(tracker, args):
 def start_sniffer(args):
     from wifitracker import sniffer
     pid = os.getpid()
+    interface = args['<interface>']
+    monitor_active = sniffer.check_monitor(interface)
     log.info("PID: {}".format(pid))
     with open(PID_FILE, 'w') as file:
         file.write(str(pid))
+        if not monitor_active:
+            file.write('\n' + interface)
     try:
-        sniffer.sniff(args['<interface>'])
+        if not monitor_active:
+            print "starting monitor..."
+            sniffer.start_monitor(interface)
+        sniffer.sniff(interface)
     except Exception as e:
         print e
+        if not monitor_active:
+            print "stopping monitor..."
+            sniffer.stop_monitor(interface)
 
 
 if __name__ == "__main__":
@@ -136,5 +146,18 @@ if __name__ == "__main__":
 
     elif args['kill']:
         with open(PID_FILE, 'r') as file:
-            pid = int(file.read())
-        os.kill(pid, 9)
+            lines = file.readlines()
+            pid = int(lines[0])
+            try:
+                interface = lines[1][:-1]
+            except IndexError:
+                interface = None
+        try:
+            os.kill(pid, 9)
+        except OSError as e:
+            print "ERROR: {}".format(e.strerror)
+        else:
+            if interface:
+                from wifitracker import sniffer
+                if sniffer.check_monitor(interface):
+                    sniffer.stop_monitor(interface)

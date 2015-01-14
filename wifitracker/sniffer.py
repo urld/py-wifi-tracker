@@ -1,5 +1,7 @@
 import datetime
 import logging
+import os
+from subprocess import Popen, PIPE
 
 from scapy.all import sniff as scapy_sniff
 from scapy.all import conf as scapy_conf
@@ -80,3 +82,39 @@ def sniff(interface):
     scapy_sniff(prn=packet_handler,
                 filter='type mgt subtype probe-req',
                 store=0)
+
+
+def check_monitor(interface):
+    """Checks if an interface is in monitor mode (using iwconfig).
+    Raises IwconfigError if interface can not be found.
+    """
+    iwconfig = Popen(['iwconfig', interface], stdout=PIPE, stderr=PIPE)
+    iwconfig_out, iwconfig_err = iwconfig.communicate()
+    if iwconfig.returncode == 0:
+        if 'Mode:Monitor' in iwconfig_out:
+            return True
+        elif 'IEEE 802.11' in iwconfig_out:
+            return False
+    else:
+        # interface not found (probably)
+        raise IwconfigError(iwconfig_out)
+
+
+def start_monitor(interface):
+    os.system('ifconfig {} down'.format(interface))
+    os.system('iwconfig {} mode monitor'.format(interface))
+    os.system('ifconfig {} up'.format(interface))
+
+
+def stop_monitor(interface):
+    os.system('ifconfig {} down'.format(interface))
+    os.system('iwconfig {} mode managed'.format(interface))
+    os.system('ifconfig {} up'.format(interface))
+
+
+class IwconfigError(EnvironmentError):
+    """Raised when there is an error executing the iwconfig command.
+    """
+
+    def __init__(self, msg):
+        self.msg = msg

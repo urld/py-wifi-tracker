@@ -8,7 +8,6 @@ Requirements
 ============
 
 - tcpdump
-- airmon-ng (or something else to put your wifi card in monitor mode)
 - Python 2.7:
   
   - scapy 2.1.0
@@ -21,27 +20,28 @@ Install dependencies (on debian in this case):
 
 .. code-block:: console
 
-    # apt-get install libssl-dev tcpdump iw
-    # wget http://download.aircrack-ng.org/aircrack-ng-1.2-beta1.tar.gz
-    # tar -zxvf aircrack-ng-1.2-beta1.tar.gz
-    # cd aircrack-ng-1.2-beta1
-    # make
-    # make install
+    $ apt-get install tcpdump iw
 
 Install required python libraries:
 
 .. code-block:: console
 
-    # git clone git://github.com/kennethreitz/requests.git
-    # cd requests
-    # python setup.py install
+    $ git clone git://github.com/kennethreitz/requests.git
+    $ cd requests
+    $ python setup.py install
 
-    # wget http://www.secdev.org/projects/scapy/files/scapy-latest.tar.gz
-    # tar xvzf scapy-latest.tar.gz
-    # cd scapy-2.1.0
-    # python setup.py install
+    $ wget http://www.secdev.org/projects/scapy/files/scapy-latest.tar.gz
+    $ tar xvzf scapy-latest.tar.gz
+    $ cd scapy-2.1.0
+    $ python setup.py install
 
+Install wifi-tracker:
 
+.. code-block:: console
+
+    $ git clone git://github.com/durl/wifi-tracker.git
+    $ cd wifi-tracker
+    $ python setup.py install
 
 Usage
 =====
@@ -112,5 +112,8 @@ TODO/Known Issues
 - analyzing the data is very slow if more than 100.000 requests have been collected (which can be sooner than one might expect)
 - little to none error handling
 - unittests (at least for data analysis)
-- start monitor device with sniff command (see `wifijammer <https://github.com/DanMcInerney/wifijammer/blob/master/wifijammer.py>`_)
 - log to stdout, write output to file, since json can not be processed with line based tools like grep
+- lookup geo location of known SSIDs using WiGLE (see `wigle wifi geolocation (Python recipe) <http://code.activestate.com/recipes/578637-wigle-wifi-geolocation/>`_)
+      
+  - visualize devices known SSIDs on a map
+  - select only most likely location if multiple accesspints exist
