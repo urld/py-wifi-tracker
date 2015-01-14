@@ -6,6 +6,7 @@ Usage:
     wifi-tracker show (devices|stations|aliases) [<id>] [options]
     wifi-tracker set <device_mac> <alias> [--force]
     wifi-tracker kill
+    wifi-tracker monitor <interface> (start|stop) [--force]
     wifi-tracker -h | --help
     wifi-tracker --version
 
@@ -22,12 +23,15 @@ Commands:
                     (this operation could take some time)
     set             Set an alias for a known device.
     kill            Kill the last startet sniffer process.
+    monitor         Start or stop monitor mode on specified interface.
 """
 
 import datetime
 import logging
 import os
 import sys
+from subprocess import Popen, PIPE
+
 
 from docopt import docopt
 from wifitracker import __version__
@@ -36,6 +40,75 @@ PID_FILE = '/var/opt/wifi-tracker/pid.lock'
 DATA_DIR = '/var/opt/wifi-tracker'
 
 log = logging.getLogger(__name__)
+
+
+def check_monitor(interface):
+    iw_out = iwconfig(interface)
+    if 'IEEE 802.11' in iw_out:
+        if 'Mode:Monitor' in iw_out:
+            return True
+        else:
+            if 'Not-Associated' in iw_out:
+                return False
+            else:
+                raise InterfaceBusyError("wireless network interface in use")
+    else:
+        raise InterfaceError("not a wireless network interface")
+
+
+def iwconfig(interface):
+    iwconfig = Popen(['iwconfig', interface], stdout=PIPE, stderr=PIPE)
+    iwconfig_out, iwconfig_err = iwconfig.communicate()
+    exit = iwconfig.returncode
+    if exit == 0:
+        return iwconfig_out
+    else:
+        raise InterfaceError(iwconfig_err)
+
+
+def start_monitor(interface, force=False):
+    try:
+        monitor = check_monitor(interface)
+    except InterfaceBusyError as e:
+        if force:
+            monitor = False
+        else:
+            raise e
+    if monitor:
+        # already running
+        return True
+    else:
+        os.system('ifconfig {} down'.format(interface))
+        os.system('iwconfig {} mode monitor'.format(interface))
+        os.system('ifconfig {} up'.format(interface))
+    return True
+
+
+def stop_monitor(interface):
+    monitor = check_monitor(interface)
+    if monitor:
+        os.system('ifconfig {} down'.format(interface))
+        os.system('iwconfig {} mode managed'.format(interface))
+        os.system('ifconfig {} up'.format(interface))
+        return True
+    else:
+        return False
+
+
+class InterfaceError(EnvironmentError):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
+
+
+class InterfaceBusyError(EnvironmentError):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
 
 
 def print_jsons(object_dict):
@@ -88,22 +161,13 @@ def start_sniffer(args):
     from wifitracker import sniffer
     pid = os.getpid()
     interface = args['<interface>']
-    monitor_active = sniffer.check_monitor(interface)
     log.info("PID: {}".format(pid))
     with open(PID_FILE, 'w') as file:
-        file.write(str(pid) + '\n')
-        if not monitor_active:
-            file.write(interface + '\n')
+        file.write(str(pid))
     try:
-        if not monitor_active:
-            print "starting monitor..."
-            sniffer.start_monitor(interface)
         sniffer.sniff(interface)
     except Exception as e:
         print e
-        if not monitor_active:
-            print "stopping monitor..."
-            sniffer.stop_monitor(interface)
 
 
 if __name__ == "__main__":
@@ -143,21 +207,29 @@ if __name__ == "__main__":
         except IOError as e:
             print e
             sys.exit(1)
-
     elif args['kill']:
         with open(PID_FILE, 'r') as file:
-            lines = file.readlines()
-            pid = int(lines[0])
-            try:
-                interface = lines[1][:-1]
-            except IndexError:
-                interface = None
+            pid = int(file.read())
         try:
             os.kill(pid, 9)
         except OSError as e:
             print "ERROR: {}".format(e.strerror)
-        else:
-            if interface:
-                from wifitracker import sniffer
-                if sniffer.check_monitor(interface):
-                    sniffer.stop_monitor(interface)
+    elif args['monitor']:
+        interface = args['<interface>']
+        if args['start']:
+            try:
+                start_monitor(interface, force=args['--force'])
+            except InterfaceBusyError as be:
+                print "ERROR: {}".format(be.msg)
+                print "\tUse --force to start anyway."
+                print "\tBe aware that the interface will lose connectivity."
+                sys.exit(1)
+            except InterfaceError as ie:
+                print "ERROR: {}".format(ie.msg)
+                sys.exit(1)
+        elif args['stop']:
+            try:
+                stop_monitor(interface)
+            except Exception as e:
+                print "ERROR: {}".format(e)
+                sys.exit(1)
