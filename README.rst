@@ -20,7 +20,7 @@ Install dependencies (on debian in this case):
 
 .. code-block:: console
 
-    $ apt-get install tcpdump iw
+    $ apt-get install tcpdump
 
 Install required python libraries:
 
@@ -46,34 +46,49 @@ Install wifi-tracker:
 Usage
 =====
 
-You should do all of this as privileged user, or the monitor device might not be accessible.
-
 Setup:
 
-.. code-block:: console
-
-    $ airmon-ng start wlan0
-
-Sniff probe requests:
+Sniff probe requests on a wireless network interface 'wlan1':
 
 .. code-block:: console
 
-    $ wifi-tracker sniff mon0 --debug
+    $ wifi-tracker monitor wlan1 start
+    $ wifi-tracker sniff wlan1
 
 Kill sniffer:
 
 .. code-block:: console
 
-    $ wifi-tracker kill <pid>
+    $ wifi-tracker kill
+    $ wifi-tracker monitor wlan1 stop
 
-Generate a list of tracked devices after some sniffing:
+Analyze:
 
 .. code-block:: console
 
-    $ wifi-tracker show
-
-Usage-Examples
-==============
+    $ wifi-tracker show devices
+    [
+    {
+        "device_mac": "9c:ad:97:22:fa:3a",
+        "alias": null,
+        "known_ssids": [
+            "AirportNetwork",
+            "AndroidAP"
+        ],
+        "last_seen_dts": "2014-12-23 10:11:22.301919",
+        "vendor_company": "Hon Hai Precision Ind. Co.,Ltd.",
+        "vendor_country": "CHINA"
+    },
+    {
+        "device_mac": "f8:e0:79:92:a3:4b",
+        "alias": null,
+        "known_ssids": [],
+        "last_seen_dts": "2014-12-25 11:14:51.124419",
+        "vendor_company": "Motorola Mobility LLC",
+        "vendor_country": "UNITED STATES"
+    },
+    ...
+    ]
 
 .. code-block:: console
 
