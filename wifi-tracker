@@ -91,9 +91,9 @@ def start_sniffer(args):
     monitor_active = sniffer.check_monitor(interface)
     log.info("PID: {}".format(pid))
     with open(PID_FILE, 'w') as file:
-        file.write(str(pid))
+        file.write(str(pid) + '\n')
         if not monitor_active:
-            file.write('\n' + interface)
+            file.write(interface + '\n')
     try:
         if not monitor_active:
             print "starting monitor..."
