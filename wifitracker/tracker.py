@@ -5,8 +5,11 @@ import json
 import logging
 import os.path
 from threading import Thread
-from time import sleep
 from itertools import islice
+try:
+    from queue import Queue  # try python3
+except ImportError:
+    from Queue import Queue
 
 # http requests for humans:
 import requests
@@ -274,50 +277,45 @@ def _lookup_vendor(device_mac, session=None):
     return vendor_response
 
 
-def set_vendors(devices, interval=1, max_slots=100):
+def set_vendors(devices, workers=100):
     """Lookup the vendors for each device in a dict of devices.
     The lookup requests are executed in parallel for better performance when
     handling many devices.
 
     Keyword arguments:
-    max_slots -- number of lookups which should be done in parallel
-    interval -- seconds between checks if a lookup finished
+    workers -- number of lookups which should be done in parallel
     """
 
     class VendorLookupThread(Thread):
         """Helper class for concurrent vendor lookup."""
 
-        def __init__(self, device, session):
+        def __init__(self, queue, session):
             super(VendorLookupThread, self).__init__()
-            self.device = device
+            self.queue = queue
             self.session = session
 
         def run(self):
-            self.device.set_vendor(session)
+            while True:
+                device = self.queue.get()
+                device.set_vendor(self.session)
+                self.queue.task_done()
 
     # the session is used to reuse https connections:
     session = requests.Session()
-    adapter = requests.adapters.HTTPAdapter(pool_connections=max_slots,
-                                            pool_maxsize=max_slots,
+    adapter = requests.adapters.HTTPAdapter(pool_connections=workers,
+                                            pool_maxsize=workers,
                                             pool_block=True)
     session.mount('https://', adapter)
-    # initialize one thread per device, but do not start them:
-    threads = [VendorLookupThread(devices[id], session) for id in devices]
-    slots = 0
 
-    # start a number of threads and wait for some of them to finish before
-    # starting more threads:
-    for i in xrange(0, len(threads)):
-        threads[i].start()
-        slots += 1
-        while slots >= max_slots:
-            # wait before checking for free slots:
-            sleep(interval)
-            # check how many threads already finished:
-            slots = sum([(1 if t.isAlive() else 0) for t in threads])
-    # wait for remaining threads:
-    while sum([(1 if t.isAlive() else 0) for t in threads]) > 0:
-        sleep(interval)
+    queue = Queue(workers)
+
+    for i in xrange(0, workers):
+        thread = VendorLookupThread(queue, session)
+        thread.setDaemon(True)
+        thread.start()
+    for id in devices:
+        queue.put(devices[id])
+    queue.join()
     session.close()
 
 
